@@ -116,7 +116,7 @@ class OUActionNoise:
 def policy(state, noise_object):
     sampled_actions = tf.squeeze(actor_model(state))
     if training:
-        noise = np.clip(noise_object(), -0.3, 0.3)
+        noise = np.clip(noise_object(), -1, 1)
         sampled_actions = (sampled_actions.numpy() + noise + np.random.normal(scale=0.3))
         #print(sampled_actions)
 
@@ -128,12 +128,12 @@ def policy(state, noise_object):
 actoooooor = True
 criticcccc = True
 def get_actor():
-    last_init = tf.random_uniform_initializer(minval=-0.003, maxval=0.003)
+    last_init = tf.random_uniform_initializer(minval=-0.03, maxval=0.03)
 
     inputs = layers.Input(shape=(NUM_STATES,))
-    out = layers.Dense(64, activation="relu")(inputs)
+    out = layers.Dense(128, activation="relu")(inputs)
+    out = layers.Dense(256, activation="relu")(out)
     out = layers.Dense(128, activation="relu")(out)
-    out = layers.Dense(64, activation="relu")(out)
     outputs = layers.Dense(1, activation="tanh", kernel_initializer=last_init)(out)
 
     outputs = outputs * UPPER_BOUND
@@ -148,17 +148,18 @@ def get_actor():
 
 def get_critic():
     state_input = layers.Input(shape=(NUM_STATES))
-    state_out = layers.Dense(32, activation="relu")(state_input)
-    state_out = layers.Dense(48, activation="relu")(state_out)
+    state_out = layers.Dense(64, activation="relu")(state_input)
+    state_out = layers.Dense(128, activation="relu")(state_out)
 
     action_inputs = layers.Input(shape=(NUM_ACTIONS))
-    action_out = layers.Dense(16, activation="relu")(action_inputs)
+    action_out = layers.Dense(64, activation="relu")(action_inputs)
 
     concat = layers.Concatenate()([state_out, action_out])
 
     out = layers.Dense(256, activation="relu")(concat)
-    out = layers.Dense(128 , activation="softmax")(out)
-    outputs = layers.Dense(1)(out)
+    out = layers.Dense(256 , activation="relu")(out)
+    out = layers.Dense(128 , activation="relu")(out)
+    outputs = layers.Dense(1, activation="softmax")(out)
 
     model = tf.keras.Model([state_input, action_inputs], outputs)
 
@@ -176,7 +177,7 @@ def get_state():
 
     # print(msg)
     # div = [30.0, 60.0, 40.0]
-    state = [float(data[i]) for i in range(3)]
+    state = [float(data[i]) for i in range(5)]
     state_list.append(state)
 
     global last_reward
@@ -201,7 +202,7 @@ def send_act(action):
 
 # Main
 
-NUM_STATES = 3
+NUM_STATES = 5
 NUM_ACTIONS = 1
 
 UPPER_BOUND = 5.0
@@ -230,7 +231,7 @@ actor_lr = 0.001
 critic_optimizer = tf.keras.optimizers.Adam(critic_lr)
 actor_optimizer = tf.keras.optimizers.Adam(actor_lr)
 
-total_episodes = 10000000
+total_episodes = 10000
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
@@ -287,6 +288,7 @@ if state == STATE_TRAINING:
             send_act(action[0])
 
             state, reward, done = get_state()
+            #print(state)
 
             buffer.record((prev_state, action, reward, state))
             episodic_reward += reward
