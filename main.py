@@ -131,9 +131,8 @@ def get_actor():
     last_init = tf.random_uniform_initializer(minval=-0.03, maxval=0.03)
 
     inputs = layers.Input(shape=(NUM_STATES,))
-    out = layers.Dense(128, activation="relu")(inputs)
+    out = layers.Dense(256, activation="relu")(inputs)
     out = layers.Dense(256, activation="relu")(out)
-    out = layers.Dense(128, activation="relu")(out)
     outputs = layers.Dense(1, activation="tanh", kernel_initializer=last_init)(out)
 
     outputs = outputs * UPPER_BOUND
@@ -157,7 +156,6 @@ def get_critic():
     concat = layers.Concatenate()([state_out, action_out])
 
     out = layers.Dense(256, activation="relu")(concat)
-    out = layers.Dense(256 , activation="relu")(out)
     out = layers.Dense(128 , activation="relu")(out)
     outputs = layers.Dense(1, activation="softmax")(out)
 
