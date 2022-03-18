@@ -131,8 +131,10 @@ def get_actor():
     last_init = tf.random_uniform_initializer(minval=-0.03, maxval=0.03)
 
     inputs = layers.Input(shape=(NUM_STATES,))
-    out = layers.Dense(256, activation="relu")(inputs)
+    out = layers.Dense(128, activation="relu")(inputs)
     out = layers.Dense(256, activation="relu")(out)
+    out = layers.Dense(128, activation="relu")(out)
+    out = layers.Dense(64, activation="relu")(out)
     outputs = layers.Dense(1, activation="tanh", kernel_initializer=last_init)(out)
 
     outputs = outputs * UPPER_BOUND
@@ -148,7 +150,7 @@ def get_actor():
 def get_critic():
     state_input = layers.Input(shape=(NUM_STATES))
     state_out = layers.Dense(64, activation="relu")(state_input)
-    state_out = layers.Dense(128, activation="relu")(state_out)
+    state_out = layers.Dense(96, activation="relu")(state_out)
 
     action_inputs = layers.Input(shape=(NUM_ACTIONS))
     action_out = layers.Dense(64, activation="relu")(action_inputs)
@@ -157,7 +159,8 @@ def get_critic():
 
     out = layers.Dense(256, activation="relu")(concat)
     out = layers.Dense(128 , activation="relu")(out)
-    outputs = layers.Dense(1, activation="softmax")(out)
+    out = layers.Dense(64 , activation="softmax")(out)
+    outputs = layers.Dense(1)(out)
 
     model = tf.keras.Model([state_input, action_inputs], outputs)
 
@@ -175,14 +178,14 @@ def get_state():
 
     # print(msg)
     # div = [30.0, 60.0, 40.0]
-    state = [float(data[i]) for i in range(5)]
+    state = [float(data[i]) for i in range(NUM_STATES)]
     state_list.append(state)
 
     global last_reward
 
     # state, reward, done, info
     done = False
-    reward = -(1 * state[0] ** 2  + 0.1 * state[1] ** 2 + 0.05 * state[2] ** 2)
+    reward = -( alpha*(1 * (state[0]) ** 2  + 0.05 * state[1] ** 2 + 0.1+(0.005-0.1)*(1-alpha) * state[2] ** 2) + (1-alpha)*((state[3]**2+state[4]**2) / (1+abs(state[0]))))
     #reward = ( 1/(1 + abs(state[0])) + 0.1/(1 + abs(state[1])) + 0.01/(1 + abs(state[2])) )
     if np.abs(state[0]) > 30:
         print("QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ")
@@ -207,6 +210,7 @@ UPPER_BOUND = 5.0
 LOWER_BOUND = -5.0
 
 last_reward = 0
+alpha = 1
 
 std_dev = 0.3
 ou_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
@@ -229,13 +233,13 @@ actor_lr = 0.001
 critic_optimizer = tf.keras.optimizers.Adam(critic_lr)
 actor_optimizer = tf.keras.optimizers.Adam(actor_lr)
 
-total_episodes = 10000
+total_episodes = 3000
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
-tau = 0.005
+tau = 0.007
 
-buffer = Buffer(50000, 64)
+buffer = Buffer(80000, 80)
 
 ep_reward_list = []
 avg_reward_list = []
@@ -261,9 +265,10 @@ STATE_TRAINING = 1
 STATE_RUNNING = 2
 STATE_TESTING = 3
 testing_episodes = 100
-state = STATE_TRAINING
+state = 1
 training = state == STATE_TRAINING
 weights = "20211202/h5/actor_model-1200.h5"
+model_name = "h5/actor_model-2000"
 
 if state == STATE_TRAINING:
     for ep in range(total_episodes):
@@ -276,6 +281,7 @@ if state == STATE_TRAINING:
         tt = 0
 
         while True:
+            alpha = 0.9+(0.3-0.9)*(1-ep/total_episodes)
             tt += 1
             # print("state", prev_state)
             tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
@@ -324,13 +330,15 @@ if state == STATE_TRAINING:
             df.to_csv("history/his-{0}.csv".format(ep), index=False, encoding='utf-8')
 
             columns = list(zip(*state_list))
-            saf = pd.DataFrame.from_dict({"angel":columns[0], "angular_velocity":columns[1], "angular_acc":columns[2], "action":action_list})
+            saf = pd.DataFrame.from_dict({"angel":columns[0], "angular_velocity":columns[1], "angular_acc":columns[2], "motor1":columns[3], "motor2":columns[4], "action":action_list})
+            # saf = pd.DataFrame.from_dict({"angel":columns[0], "angular_velocity":columns[1], "angular_acc":columns[2], "action":action_list})
             saf.to_csv("states/sa-{0}.csv".format(ep), index=False, encoding="utf-8")
             state_list = []
             action_list = []
 
 elif state == STATE_RUNNING:
-    actor_model.load_weights(weights)
+    actor_model = tf.keras.models.load_model(model_name)
+    # actor_model.load_weights(weights)
     while True:
         (client, address) = server.accept()
         print("Connected, connect to ", address)
