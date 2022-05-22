@@ -1,6 +1,5 @@
 from numpy.core.fromnumeric import nonzero, transpose
 from six import b
-from sympy import true
 import tensorflow as tf
 from tensorflow.keras import layers
 import numpy as np
@@ -162,7 +161,6 @@ def get_actor():
         actoooooor = False
     return model
 
-
 def get_critic():
     state_input = layers.Input(shape=(NUM_STATES))
     state_out = layers.Dense(64, activation="relu")(state_input)
@@ -203,10 +201,10 @@ def get_state():
     # state, reward, done, info
     done = False
 
-    reward_stand = (1*(state[0])**2 + 0.1*state[1]**2 + (0.01*state[2]**2))
+    reward_stand = (1*(state[0])**2 + 0.1*state[1]**2 + (0.05*state[2]**2))
     reward_compitition = (((1+state[3]+state[4])) / (1+abs(state[0])))
-    reward = -(alpha*reward_stand + (1-alpha)*reward_compitition)
-
+    #reward = -(alpha*reward_stand + (1-alpha)*reward_compitition)
+    reward = -reward_stand
     # reward = -(reward_stand + state[3] + state[4])
 
     if np.abs(state[0]) > 30:
@@ -299,10 +297,11 @@ testing_episodes = 21
 state = 1
 training = state == STATE_TRAINING
 weights = "20211202/h5/actor_model-1200.h5"
-model_name = "20220411_30s/h5/actor_model-640"
+model_name = "20220411_30s/h5/actor_model-480"
 # model_name = "20220411_r/h5/actor_model-540"
 
-
+delay = 0
+t_time = time.time()
 if state == STATE_TRAINING:
     for ep in range(total_episodes):
         (client, address) = server.accept()
@@ -312,10 +311,19 @@ if state == STATE_TRAINING:
         prev_state, reward, done = get_state()
         episodic_reward = 0
         tt = 0
-
+        delay = 0
+        t_time = time.time()
+        alpha = alpha_max+(alpha_min-alpha_max)*float(min(1.0, (ep/860.0)))
         while True:
-            alpha = alpha_max+(alpha_min-alpha_max)*float(min(1.0, (ep/860.0)))
             tt += 1
+            delay = (delay+1) % 4
+            if delay!=1:
+                send_act(100)
+                time.sleep(sleep_time)
+                bytes.decode(client.recv(1024))
+                continue
+            print(time.time()-t_time)
+            t_time = time.time()
             # print("state", prev_state)
             tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
 
