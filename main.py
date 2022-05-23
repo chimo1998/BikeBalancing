@@ -123,17 +123,18 @@ class OUActionNoise:
 
 def policy(state, noise_object):
     sampled_actions = tf.squeeze(actor_model(state))
+    sampled_actions = sampled_actions.numpy()
     if training:
-        noise = np.clip(noise_object(), -1, 1) * (max(0.0, 1-(max(0,ep-100)/640.0)))
+        noise = np.clip(noise_object(), -0.5, 0.5) * (max(0.0, 1-(max(0,ep-100)/640.0)))
         # print("noise %f" % noise)
-        sampled_actions = (sampled_actions.numpy() + noise)
+        sampled_actions += noise
         # sampled_actions = (sampled_actions.numpy() + noise + np.random.normal(scale=0.3))
         # print(sampled_actions)
 
     legal_action = np.clip(sampled_actions, LOWER_BOUND, UPPER_BOUND)
     action_list.append(legal_action)
 
-    return [np.squeeze(legal_action)]
+    return legal_action
 
 
 actoooooor = True
@@ -148,7 +149,7 @@ def get_actor():
     out = layers.Dense(256, activation="relu")(out)
     out = layers.Dense(128, activation="relu")(out)
     out = layers.Dense(64, activation="relu")(out)
-    outputs = layers.Dense(1, activation="tanh",
+    outputs = layers.Dense(NUM_ACTIONS, activation="sigmoid",
                            kernel_initializer=last_init)(out)
 
     outputs = outputs * UPPER_BOUND
@@ -194,6 +195,7 @@ def get_state():
     # print(msg)
     # div = [30.0, 60.0, 40.0]
     state = [float(data[i]) for i in range(NUM_STATES)]
+    print(state)
     state_list.append(state)
 
     global last_reward
@@ -201,9 +203,9 @@ def get_state():
     # state, reward, done, info
     done = False
 
-    reward_stand = (1*(state[0])**2 + 0.1*state[1]**2 + (0.05*state[2]**2))
+    reward_stand = (1*(state[0])**2 + 0.01*state[1]**2 + (0.005*state[2]**2))
     reward_compitition = (((1+state[3]+state[4])) / (1+abs(state[0])))
-    #reward = -(alpha*reward_stand + (1-alpha)*reward_compitition)
+    # reward = -(alpha*reward_stand + (1-alpha)*reward_compitition)
     reward = -reward_stand
     # reward = -(reward_stand + state[3] + state[4])
 
@@ -219,20 +221,20 @@ def get_state():
 
 
 def send_act(action):
-    msg: str = "%f" % action
-    client.send(msg.encode("utf8"))
+    # msg: str = "%f" % action
+    client.send(action.encode("utf8"))
 
 # Main
 
 
 NUM_STATES = 5
-NUM_ACTIONS = 1
+NUM_ACTIONS = 2
 
 fps = 40
 sleep_time = (float)(1/fps)
 
 UPPER_BOUND = 5.0
-LOWER_BOUND = -5.0
+LOWER_BOUND = 0
 
 last_reward = 0
 alpha = 1.0
@@ -241,7 +243,7 @@ alpha_min = 0.5
 
 std_dev = 0.3
 ou_noise = OUActionNoise(mean=np.zeros(
-    1), std_deviation=float(std_dev) * np.ones(1))
+    2), std_deviation=float(std_dev) * np.ones(2))
 
 actor_model = get_actor()
 #actor_model.summary()
@@ -318,7 +320,7 @@ if state == STATE_TRAINING:
             tt += 1
             delay = (delay+1) % 4
             if delay!=1:
-                send_act(100)
+                send_act('%d,%d' % (100, 100))
                 time.sleep(sleep_time)
                 bytes.decode(client.recv(1024))
                 continue
@@ -328,9 +330,10 @@ if state == STATE_TRAINING:
             tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
 
             action = policy(tf_prev_state, ou_noise)
-            print("action", action[0])
+            print("action", action)
             # Do action
-            send_act(action[0])
+            st: str = '%f, %f' % (action[0], action[1])
+            send_act(st)
 
             state, reward, done = get_state()
             #print(state)
@@ -344,13 +347,13 @@ if state == STATE_TRAINING:
 
             if done:
                 print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-                send_act(200)
+                send_act('%d,%d' % (200, 200))
                 break
 
             prev_state = state
             time.sleep(sleep_time)
             if(tt/fps > episode_time):
-                send_act(200)
+                send_act('%d,%d' % (200, 200))
                 break
 
         ep_reward_list.append(episodic_reward)
